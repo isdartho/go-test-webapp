@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -17,26 +19,25 @@ func main() {
 
 	app.Get("/", func(c *fiber.Ctx) error {
 		log.Println("Home")
-		return c.Render("index", fiber.Map{"data": "test"})
+		uid := uuid.NewString()[:8]
+		c.Cookie(&fiber.Cookie{
+			Name:  "client_id",
+			Value: uid,
+		})
+		return c.Render("index", fiber.Map{"ClientId": uid})
 	})
 
-	// app.Use("/ws", func(c *fiber.Ctx) error {
-	// 	// IsWebSocketUpgrade returns true if the client
-	// 	// requested upgrade to the WebSocket protocol.
-	// 	log.Println("Websocket requested!")
-	// 	if websocket.IsWebSocketUpgrade(c) {
-	// 		c.Locals("allowed", true)
-	// 		return c.Next()
-	// 	}
-	// 	return fiber.ErrUpgradeRequired
-	// })
+	clients := make(map[string]*websocket.Conn)
 
 	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
 		// c.Locals is added to the *websocket.Conn
 		log.Println(c.Locals("allowed")) // true
 		// log.Println(c.Params("id"))       // 123
 		// log.Println(c.Query("v"))         // 1.0
-		log.Println(c.Cookies("session")) // ""
+		client_id := c.Cookies("client_id")
+		clients[client_id] = c
+		log.Println("Client Online: ", client_id)
+		log.Println("Clients: ", len(clients))
 
 		var (
 			mt  int
@@ -46,6 +47,7 @@ func main() {
 		for {
 			if mt, msg, err = c.ReadMessage(); err != nil {
 				log.Println("read:", err)
+				delete(clients, client_id)
 				break
 			}
 			log.Printf("recv: %s", msg)
@@ -55,14 +57,24 @@ func main() {
 				fmt.Println("Error Unmarshaling")
 			}
 			// fmt.Println(m["HEADERS"].(map[string]interface{})["HX-Target"])
-			mesg := []byte(`<div hx-swap-oob="beforeend:#messages"><p><i style="color: green" class="fa fa-circle"></i> ` + m["text"].(string) + `</p></div>`)
-			if err = c.WriteMessage(mt, mesg); err != nil {
-				log.Println("write:", err)
-				break
+			for cid, conn := range clients {
+				var mesg = []byte(``)
+				now := time.Now()
+				if cid == client_id {
+					mesg = []byte(`<div hx-swap-oob="beforeend:#messages"><div class="grid my-2"><span class="font-bold text-size-xl">` + client_id + ` (You):</span><span class="text-size-3 text-slate-500">` + now.Format("2006-01-02 15:04:05") + `</span><span class="font-italic text-size-lg">` + m["text"].(string) + `</span></div></div>`)
+				} else {
+					mesg = []byte(`<div hx-swap-oob="beforeend:#messages"><div class="grid my-2"><span class="font-bold text-size-xl">` + client_id + `:</span><span class="text-size-3 text-slate-500">` + now.Format("2006-01-02 15:04:05") + `</span><span class="font-italic text-size-lg">` + m["text"].(string) + `</span></div></div>`)
+				}
+				log.Println("Sending to : ", cid)
+				if err = conn.WriteMessage(mt, mesg); err != nil {
+					log.Println("write:", err)
+					break
+				}
 			}
+
 		}
 
 	}))
 
-	app.Listen(":3000")
+	log.Fatal(app.Listen("0.0.0.0:3000"))
 }

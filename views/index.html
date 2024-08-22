@@ -3,19 +3,32 @@
         <script src="https://unpkg.com/htmx.org@2.0.2"></script>
         <script src="https://cdn.jsdelivr.net/npm/@unocss/runtime"></script>
         <script src="https://unpkg.com/htmx-ext-ws@2.0.1/ws.js"></script>
-
+        <title>Go-Chat</title>
     </head>
     <body>
-        <div class="container mx-auto">Hello darkness my old friend, I have come to talk with you again</div>
-        <div  hx-ext="ws" ws-connect="/ws" hx-trigger="load" >
-            <p>{{.data}}</p>
-            <div id="messages">
+        <div class="container mx-auto">
+            <div>
+                <h1 class="font-bold">Go-Chat-Websockets</h1>
             </div>
-            <form id="form" ws-send hx-reset-on-success>
-                <input name="text" type="text" class="border-2 border-gray-300 p-2" placeholder="Type your message"
-                  >
-                <button type="submit" class="bg-blue-500 text-white px-4 py-2">Send</button>
-              </form>
+            <div id="main" hx-ext="ws" ws-connect="/ws" hx-trigger="load">
+                <div><p class="font-bold">YourID: {{.ClientId}}</p></div>
+                <div id="messages" class="min-h-32 p-2 bg-slate-200">
+                </div>
+                <div class="mt-6">
+                    <form id="form" ws-send>
+                        <input id="messageInput" name="text" type="text" class="border-2 border-gray-300 p-2" placeholder="Type your message"
+                        >
+                        <button type="submit" class="bg-blue-500 text-white px-4 py-2" hx-on="submit: ">Send</button>
+                    </form>
+                    <script>
+                        document.getElementById('main').addEventListener('htmx:wsAfterMessage', function(event) {
+                          // Reset the messageInput after the WebSocket message is sent
+                          document.querySelector('#messageInput').value=''
+                        });
+                    </script>
+                </div>
+            </div>
         </div>
+        
     </body>
 </html>
